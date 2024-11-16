@@ -3,31 +3,14 @@ import { ThreadStartedEventBody, NewSourceEventBody } from '../../common/customE
 import { TreeNode } from './treeNode';
 import { SessionNode } from './sessionNode';
 
-interface PendingSession {
-	promise: Promise<SessionNode>;
-	resolve: (sessionNode: SessionNode) => void;
-}
-
 export class RootNode extends TreeNode {
 
 	private children: SessionNode[] = [];
 	private showSessions = false;
-	private pendingSessions = new Map<string, PendingSession>();
 
 	public constructor() {
 		super('');
 		this.treeItem.contextValue = 'root';
-	}
-
-	private async waitForSession(sessionId: string): Promise<SessionNode> {
-		const sessionNode = this.children.find((child) => (child.id === sessionId));
-		if (sessionNode) {
-			return sessionNode;
-		}
-		let resolve!: (sessionNode: SessionNode) => void;
-		const promise = new Promise<SessionNode>(r => resolve = r);
-		this.pendingSessions.set(sessionId, { promise, resolve });
-		return await promise;
 	}
 
 	public addSession(session: vscode.DebugSession): TreeNode | undefined {
@@ -37,14 +20,7 @@ export class RootNode extends TreeNode {
 			let index = this.children.findIndex((child) => (child.treeItem.label! > session.name));
 			if (index < 0) index = this.children.length;
 
-			const sessionNode = new SessionNode(session, this);
-			this.children.splice(index, 0, sessionNode);
-
-			const pendingSession = this.pendingSessions.get(session.id);
-			if (pendingSession) {
-				pendingSession.resolve(sessionNode);
-				this.pendingSessions.delete(session.id);
-			}
+			this.children.splice(index, 0, new SessionNode(session, this));
 
 			return this;
 
@@ -60,13 +36,13 @@ export class RootNode extends TreeNode {
 
 	}
 
-	public async addThread(
+	public addThread(
 		threadInfo: ThreadStartedEventBody,
 		sessionId: string
-	): Promise<TreeNode | undefined> {
+	): TreeNode | undefined {
 
-		const sessionNode = await this.waitForSession(sessionId);
-		return this.fixChangedItem(sessionNode.addThread(threadInfo));
+		let sessionItem = this.children.find((child) => (child.id === sessionId));
+		return sessionItem ? this.fixChangedItem(sessionItem.addThread(threadInfo)) : undefined;
 
 	}
 
@@ -80,13 +56,13 @@ export class RootNode extends TreeNode {
 
 	}
 
-	public async addSource(
+	public addSource(
 		sourceInfo: NewSourceEventBody,
 		sessionId: string
-	): Promise<TreeNode | undefined> {
+	): TreeNode | undefined {
 
-		const sessionNode = await this.waitForSession(sessionId);
-		return this.fixChangedItem(sessionNode.addSource(sourceInfo));
+		let sessionItem = this.children.find((child) => (child.id === sessionId));
+		return sessionItem ? this.fixChangedItem(sessionItem.addSource(sourceInfo)) : undefined;
 
 	}
 
